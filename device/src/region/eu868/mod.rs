@@ -45,7 +45,7 @@ impl RegionHandler for EU868 {
     }
 
     fn get_data_frequency(&mut self, random: u8) -> u32 {
-        if let Some(cf_list) = self.cf_list {
+        let channel = if let Some(cf_list) = self.cf_list {
             let channel = random as usize & 0b111;
             self.last_tx = channel;
             if channel < JOIN_CHANNELS.len() {
@@ -57,11 +57,13 @@ impl RegionHandler for EU868 {
             let channel = random as usize % JOIN_CHANNELS.len();
             self.last_tx = channel;
             JOIN_CHANNELS[channel]
-        }
+        };
+        log::info!("Selecting data channel {}", channel);
+        channel
     }
 
     fn get_rx_frequency(&self, _frame: &Frame, window: &Window) -> u32 {
-        match window {
+        let channel = match window {
             Window::_1 => {
                 if let Some(cf_list) = self.cf_list {
                     let channel = self.last_tx;
@@ -75,14 +77,16 @@ impl RegionHandler for EU868 {
                     JOIN_CHANNELS[channel]
                 }
             }
-            Window::_2=> 869_525_000,
-        }
+            Window::_2 => 869_525_000,
+        };
+        log::info!("Selecting RX freq {}", channel);
+        channel
     }
 
     fn get_tx_datarate(&self, datarate: usize, _frame: &Frame) -> Datarate {
         DATARATES[datarate].clone()
     }
-    fn get_rx_datarate(&self, datarate: usize, _frame: &Frame, window: &Window ) -> Datarate {
+    fn get_rx_datarate(&self, datarate: usize, _frame: &Frame, window: &Window) -> Datarate {
         let datarate = match window {
             Window::_1 => datarate,
             Window::_2 => 0,
