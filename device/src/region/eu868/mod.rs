@@ -86,7 +86,7 @@ impl RegionHandler for EU868 {
     fn get_rx_datarate(&self, datarate: DR, _frame: &Frame, window: &Window) -> Datarate {
         let datarate = match window {
             Window::_1 => datarate,
-            Window::_2 => DR::_0,
+            Window::_2 => DR::_3,
         };
         DATARATES[datarate as usize].clone()
     }
