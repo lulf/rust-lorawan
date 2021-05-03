@@ -46,6 +46,7 @@ use super::super::no_session::{NoSession, SessionData};
 use super::super::State as SuperState;
 use super::super::*;
 use super::{
+    radio::PhyRxTxBuf,
     region::{Frame, Window},
     CommonState,
 };
@@ -207,8 +208,8 @@ where
             self.session.appskey(),
         ) {
             Ok(packet) => {
-                self.shared.buffer.clear();
-                self.shared.buffer.extend(packet);
+                self.shared.buffer.clear_buf();
+                self.shared.buffer.extend_buf(packet);
             }
             Err(_) => panic!("Error assembling packet!"),
         }

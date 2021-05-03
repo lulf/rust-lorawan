@@ -2,6 +2,7 @@ use super::super::session::Session;
 use super::super::State as SuperState;
 use super::super::*;
 use super::{
+    radio::PhyRxTxBuf,
     region::{Frame, Window},
     CommonState, Shared,
 };
@@ -185,7 +186,7 @@ where
         // use lowest 16 bits for devnonce
         let devnonce_bytes = random as u16;
 
-        self.shared.buffer.clear();
+        self.shared.buffer.clear_buf();
 
         let mut phy: JoinRequestCreator<[u8; 23], C> = JoinRequestCreator::default();
         let creds = &self.shared.credentials;
@@ -199,7 +200,7 @@ where
 
         let devnonce_copy = DevNonce::new(devnonce).unwrap();
 
-        self.shared.buffer.extend(vec);
+        self.shared.buffer.extend_buf(vec);
 
         // we'll use the rest for frequency and subband selection
         random >>= 16;
