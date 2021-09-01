@@ -57,6 +57,24 @@ pub trait PhyRxTx {
         Self: core::marker::Sized;
 }
 
+#[cfg(feature = "async")]
+pub trait AsyncPhyRxTx {
+    type PhyEvent: fmt::Debug;
+    type PhyError: fmt::Debug;
+    type PhyResponse: fmt::Debug;
+
+    fn get_mut_radio(&mut self) -> &mut Self;
+
+    // we require mutability so we may decrypt in place
+    fn get_received_packet(&mut self) -> &mut [u8];
+
+    type HandleEventFuture<'m>: core::future::Future<Output = Result<Response<Self>, Error<Self>>>
+        + 'm;
+    fn handle_event<'m>(&'m mut self, event: Event<Self>) -> Self::HandleEventFuture<'m>
+    where
+        Self: core::marker::Sized;
+}
+
 pub struct RadioBuffer<'a> {
     packet: &'a mut [u8],
     pos: usize,

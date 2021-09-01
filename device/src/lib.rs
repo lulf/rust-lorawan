@@ -1,8 +1,12 @@
 #![no_std]
+#![cfg_attr(feature = "async", feature(generic_associated_types))]
 
 use heapless::Vec;
 
 pub mod radio;
+
+#[cfg(feature = "async")]
+pub mod async_device;
 
 mod mac;
 use mac::Mac;
