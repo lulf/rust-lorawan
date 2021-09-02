@@ -230,12 +230,15 @@ where
     }
 
     #[cfg(feature = "async")]
-    pub async fn send(
+    pub async fn send<'m>(
         self,
-        data: &[u8],
+        data: &'m [u8],
         fport: u8,
         confirmed: bool,
-    ) -> (Self, Result<Response, Error<R>>) {
+    ) -> (Device<'m, R, C>, Result<Response, Error<R>>)
+    where
+        Self: 'm,
+    {
         self.handle_event(Event::SendDataRequest(SendData {
             data,
             fport,
@@ -279,7 +282,13 @@ where
     }
 
     #[cfg(feature = "async")]
-    pub async fn handle_event(self, event: Event<R>) -> (Self, Result<Response, Error<R>>) {
+    pub async fn handle_event<'m>(
+        self,
+        event: Event<'m, R>,
+    ) -> (Device<'m, R, C>, Result<Response, Error<R>>)
+    where
+        Self: 'm,
+    {
         match self.state {
             State::NoSession(state) => state.handle_event(event).await,
             State::Session(state) => state.handle_event(event).await,

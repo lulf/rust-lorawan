@@ -44,7 +44,7 @@ where
 use core::fmt;
 
 #[cfg(not(feature = "async"))]
-pub trait PhyRxTx {
+pub trait PhyRxTx: Sized {
     type PhyEvent: fmt::Debug;
     type PhyError: fmt::Debug;
     type PhyResponse: fmt::Debug;
@@ -53,13 +53,11 @@ pub trait PhyRxTx {
 
     // we require mutability so we may decrypt in place
     fn get_received_packet(&mut self) -> &mut [u8];
-    fn handle_event(&mut self, event: Event<Self>) -> Result<Response<Self>, Error<Self>>
-    where
-        Self: core::marker::Sized;
+    fn handle_event(&mut self, event: Event<Self>) -> Result<Response<Self>, Error<Self>>;
 }
 
 #[cfg(feature = "async")]
-pub trait PhyRxTx {
+pub trait PhyRxTx: Sized {
     type PhyEvent: fmt::Debug;
     type PhyError: fmt::Debug;
     type PhyResponse: fmt::Debug;
@@ -70,10 +68,9 @@ pub trait PhyRxTx {
     fn get_received_packet(&mut self) -> &mut [u8];
 
     type HandleEventFuture<'m>: core::future::Future<Output = Result<Response<Self>, Error<Self>>>
-        + 'm;
-    fn handle_event<'m>(&'m mut self, event: Event<Self>) -> Self::HandleEventFuture<'m>
     where
-        Self: core::marker::Sized;
+        Self: 'm;
+    fn handle_event<'m>(&'m mut self, event: Event<Self>) -> Self::HandleEventFuture<'m>;
 }
 
 pub struct RadioBuffer<'a> {
