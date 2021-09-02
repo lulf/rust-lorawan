@@ -43,6 +43,7 @@ where
 
 use core::fmt;
 
+#[cfg(not(feature = "async"))]
 pub trait PhyRxTx {
     type PhyEvent: fmt::Debug;
     type PhyError: fmt::Debug;
@@ -58,7 +59,7 @@ pub trait PhyRxTx {
 }
 
 #[cfg(feature = "async")]
-pub trait AsyncPhyRxTx {
+pub trait PhyRxTx {
     type PhyEvent: fmt::Debug;
     type PhyError: fmt::Debug;
     type PhyResponse: fmt::Debug;

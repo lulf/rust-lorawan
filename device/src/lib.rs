@@ -5,9 +5,6 @@ use heapless::Vec;
 
 pub mod radio;
 
-#[cfg(feature = "async")]
-pub mod async_device;
-
 mod mac;
 use mac::Mac;
 
@@ -218,6 +215,7 @@ where
         matches!(&self.state, State::Session(session::Session::Idle(_)))
     }
 
+    #[cfg(not(feature = "async"))]
     pub fn send(
         self,
         data: &[u8],
@@ -229,6 +227,21 @@ where
             fport,
             confirmed,
         }))
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn send(
+        self,
+        data: &[u8],
+        fport: u8,
+        confirmed: bool,
+    ) -> (Self, Result<Response, Error<R>>) {
+        self.handle_event(Event::SendDataRequest(SendData {
+            data,
+            fport,
+            confirmed,
+        }))
+        .await
     }
 
     pub fn get_fcnt_up(&self) -> Option<u32> {
@@ -257,10 +270,19 @@ where
         self.get_shared().take_join_accept()
     }
 
+    #[cfg(not(feature = "async"))]
     pub fn handle_event(self, event: Event<R>) -> (Self, Result<Response, Error<R>>) {
         match self.state {
             State::NoSession(state) => state.handle_event(event),
             State::Session(state) => state.handle_event(event),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn handle_event(self, event: Event<R>) -> (Self, Result<Response, Error<R>>) {
+        match self.state {
+            State::NoSession(state) => state.handle_event(event).await,
+            State::Session(state) => state.handle_event(event).await,
         }
     }
 }
