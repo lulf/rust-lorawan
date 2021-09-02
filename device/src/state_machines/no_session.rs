@@ -88,6 +88,7 @@ where
         }
     }
 
+    #[cfg(not(feature = "async"))]
     pub fn handle_event<C: CryptoFactory + Default>(
         self,
         event: Event<R>,
@@ -97,6 +98,19 @@ where
             NoSession::SendingJoin(state) => state.handle_event(event),
             NoSession::WaitingForRxWindow(state) => state.handle_event(event),
             NoSession::WaitingForJoinResponse(state) => state.handle_event(event),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn handle_event<C: CryptoFactory + Default>(
+        self,
+        event: Event<R>,
+    ) -> (Device<'a, R, C>, Result<Response, super::super::Error<R>>) {
+        match self {
+            NoSession::Idle(state) => state.handle_event(event).await,
+            NoSession::SendingJoin(state) => state.handle_event(event).await,
+            NoSession::WaitingForRxWindow(state) => state.handle_event(event).await,
+            NoSession::WaitingForJoinResponse(state) => state.handle_event(event).await,
         }
     }
 }
@@ -134,6 +148,7 @@ impl<'a, R> Idle<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
+    #[cfg(not(feature = "async"))]
     pub fn handle_event<C: CryptoFactory + Default>(
         mut self,
         event: Event<R>,
@@ -257,6 +272,7 @@ impl<'a, R> SendingJoin<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
+    #[cfg(not(feature = "async"))]
     pub fn handle_event<C: CryptoFactory + Default>(
         mut self,
         event: Event<R>,
@@ -275,6 +291,48 @@ where
                                     + ms as i32
                                     + self.shared.radio.get_rx_window_offset_ms())
                                     as u32;
+                                (
+                                    self.into_waiting_for_rxwindow(first_window).into(),
+                                    Ok(Response::TimeoutRequest(first_window)),
+                                )
+                            }
+                            // anything other than TxComplete | Idle is unexpected
+                            _ => {
+                                panic!("SendingJoin: Unexpected radio response");
+                            }
+                        }
+                    }
+                    Err(e) => (self.into(), Err(e.into())),
+                }
+            }
+            // anything other than a RadioEvent is unexpected
+            Event::NewSessionRequest => (
+                self.into(),
+                Err(Error::NewSessionWhileWaitingForJoinResponse.into()),
+            ),
+            Event::TimeoutFired => panic!("TODO: implement timeouts"),
+            Event::SendDataRequest(_) => (self.into(), Err(Error::SendDataWhileNoSession.into())),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn handle_event<C: CryptoFactory + Default>(
+        mut self,
+        event: Event<R>,
+    ) -> (Device<'a, R, C>, Result<Response, super::super::Error<R>>) {
+        match event {
+            // we are waiting for the async tx to complete
+            Event::RadioEvent(radio_event) => {
+                // send the transmit request to the radio
+                match self.shared.radio.handle_event(radio_event).await {
+                    Ok(response) => {
+                        match response {
+                            // expect a complete transmit
+                            radio::Response::TxDone(ms) => {
+                                let first_window =
+                                    self.shared.region.get_rx_delay(&Frame::Join, &Window::_1)
+                                        + ms
+                                        + self.shared.radio.get_rx_window_offset_ms() as u32;
                                 (
                                     self.into_waiting_for_rxwindow(first_window).into(),
                                     Ok(Response::TimeoutRequest(first_window)),
@@ -323,6 +381,7 @@ impl<'a, R> WaitingForRxWindow<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
+    #[cfg(not(feature = "async"))]
     pub fn handle_event<C: CryptoFactory + Default>(
         mut self,
         event: Event<R>,
@@ -343,6 +402,71 @@ where
                     .shared
                     .radio
                     .handle_event(radio::Event::RxRequest(rx_config))
+                {
+                    Ok(_) => {
+                        let window_close: u32 = match self.join_rx_window {
+                            // RxWindow1 one must timeout before RxWindow2
+                            JoinRxWindow::_1(time) => {
+                                let time_between_windows = self
+                                    .shared
+                                    .region
+                                    .get_rx_delay(&Frame::Join, &Window::_2)
+                                    - self.shared.region.get_rx_delay(&Frame::Join, &Window::_1);
+                                if time_between_windows
+                                    > self.shared.radio.get_rx_window_duration_ms()
+                                {
+                                    time + self.shared.radio.get_rx_window_duration_ms()
+                                } else {
+                                    time + time_between_windows
+                                }
+                            }
+                            // RxWindow2 can last however long
+                            JoinRxWindow::_2(time) => {
+                                time + self.shared.radio.get_rx_window_duration_ms()
+                            }
+                        };
+                        (
+                            WaitingForJoinResponse::from(self).into(),
+                            Ok(Response::TimeoutRequest(window_close)),
+                        )
+                    }
+                    Err(e) => (self.into(), Err(e.into())),
+                }
+            }
+            Event::RadioEvent(_) => (
+                self.into(),
+                Err(Error::RadioEventWhileWaitingForJoinWindow.into()),
+            ),
+            Event::NewSessionRequest => (
+                self.into(),
+                Err(Error::NewSessionWhileWaitingForJoinWindow.into()),
+            ),
+            Event::SendDataRequest(_) => (self.into(), Err(Error::SendDataWhileNoSession.into())),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn handle_event<C: CryptoFactory + Default>(
+        mut self,
+        event: Event<R>,
+    ) -> (Device<'a, R, C>, Result<Response, super::super::Error<R>>) {
+        match event {
+            // we are waiting for a Timeout
+            Event::TimeoutFired => {
+                let window = match &self.join_rx_window {
+                    JoinRxWindow::_1(_) => Window::_1,
+                    JoinRxWindow::_2(_) => Window::_2,
+                };
+                let rx_config =
+                    self.shared
+                        .region
+                        .get_rx_config(self.shared.datarate, &Frame::Join, &window);
+                // configure the radio for the RX
+                match self
+                    .shared
+                    .radio
+                    .handle_event(radio::Event::RxRequest(rx_config))
+                    .await
                 {
                     Ok(_) => {
                         let window_close: u32 = match self.join_rx_window {
@@ -415,6 +539,7 @@ impl<'a, R> WaitingForJoinResponse<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
+    #[cfg(not(feature = "async"))]
     pub fn handle_event<C: CryptoFactory + Default>(
         mut self,
         event: Event<R>,
@@ -467,6 +592,90 @@ where
             Event::TimeoutFired => {
                 // send the transmit request to the radio
                 if let Err(_e) = self.shared.radio.handle_event(radio::Event::CancelRx) {
+                    panic!("Error cancelling Rx");
+                }
+
+                match self.join_rx_window {
+                    JoinRxWindow::_1(t1) => {
+                        let time_between_windows =
+                            self.shared.region.get_rx_delay(&Frame::Join, &Window::_2)
+                                - self.shared.region.get_rx_delay(&Frame::Join, &Window::_1);
+                        let t2 = t1 + time_between_windows;
+                        // TODO: jump to RxWindow2 if t2 == now
+                        (
+                            WaitingForRxWindow {
+                                shared: self.shared,
+                                devnonce: self.devnonce,
+                                join_attempts: self.join_attempts,
+                                join_rx_window: JoinRxWindow::_2(t2),
+                            }
+                            .into(),
+                            Ok(Response::TimeoutRequest(t2)),
+                        )
+                    }
+                    // Timeout during second RxWindow leads to giving up
+                    JoinRxWindow::_2(_) => (
+                        Idle {
+                            shared: self.shared,
+                            join_attempts: self.join_attempts,
+                        }
+                        .into(),
+                        Ok(Response::NoJoinAccept),
+                    ),
+                }
+            }
+            Event::NewSessionRequest => (
+                self.into(),
+                Err(Error::NewSessionWhileWaitingForJoinResponse.into()),
+            ),
+            Event::SendDataRequest(_) => (self.into(), Err(Error::SendDataWhileNoSession.into())),
+        }
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn handle_event<C: CryptoFactory + Default>(
+        mut self,
+        event: Event<R>,
+    ) -> (Device<'a, R, C>, Result<Response, super::super::Error<R>>) {
+        match event {
+            // we are waiting for the async tx to complete
+            Event::RadioEvent(radio_event) => {
+                // send the transmit request to the radio
+                match self.shared.radio.handle_event(radio_event).await {
+                    Ok(response) => match response {
+                        radio::Response::RxDone(_quality) => {
+                            if let Ok(PhyPayload::JoinAccept(JoinAcceptPayload::Encrypted(
+                                encrypted,
+                            ))) =
+                                lorawan_parse(self.shared.radio.get_received_packet(), C::default())
+                            {
+                                let credentials = &self.shared.credentials;
+                                let decrypt = encrypted.decrypt(credentials.appkey());
+                                self.shared.downlink = Some(super::Downlink::Join(
+                                    self.shared.region.process_join_accept(&decrypt),
+                                ));
+                                if decrypt.validate_mic(credentials.appkey()) {
+                                    let session = SessionData::derive_new(
+                                        &decrypt,
+                                        self.devnonce,
+                                        credentials,
+                                    );
+                                    return (
+                                        Session::new(self.shared, session).into(),
+                                        Ok(Response::JoinSuccess),
+                                    );
+                                }
+                            }
+                            (self.into(), Ok(Response::NoUpdate))
+                        }
+                        _ => (self.into(), Ok(Response::NoUpdate)),
+                    },
+                    Err(e) => (self.into(), Err(e.into())),
+                }
+            }
+            Event::TimeoutFired => {
+                // send the transmit request to the radio
+                if let Err(_e) = self.shared.radio.handle_event(radio::Event::CancelRx).await {
                     panic!("Error cancelling Rx");
                 }
 
