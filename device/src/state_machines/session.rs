@@ -179,7 +179,7 @@ where
     #[cfg(feature = "async")]
     pub async fn handle_event<C: CryptoFactory + Default>(
         self,
-        event: Event<R>,
+        event: Event<'_, R>,
     ) -> (Device<'a, R, C>, Result<Response, super::super::Error<R>>) {
         match self {
             Session::Idle(state) => state.handle_event(event).await,
@@ -289,7 +289,7 @@ where
     #[cfg(feature = "async")]
     pub async fn handle_event<C: CryptoFactory + Default>(
         mut self,
-        event: Event<R>,
+        event: Event<'_, R>,
     ) -> (Device<'a, R, C>, Result<Response, super::super::Error<R>>) {
         match event {
             Event::SendDataRequest(send_data) => {
@@ -420,7 +420,7 @@ where
     #[cfg(feature = "async")]
     pub async fn handle_event<C: CryptoFactory + Default>(
         mut self,
-        event: Event<R>,
+        event: Event<'_, R>,
     ) -> (Device<'a, R, C>, Result<Response, super::super::Error<R>>) {
         match event {
             // we are waiting for the async tx to complete
@@ -547,7 +547,7 @@ where
     #[cfg(feature = "async")]
     pub async fn handle_event<C: CryptoFactory + Default>(
         mut self,
-        event: Event<R>,
+        event: Event<'_, R>,
     ) -> (Device<'a, R, C>, Result<Response, super::super::Error<R>>) {
         match event {
             // we are waiting for a Timeout
@@ -784,7 +784,7 @@ where
     #[cfg(feature = "async")]
     pub async fn handle_event<C: CryptoFactory + Default>(
         mut self,
-        event: Event<R>,
+        event: Event<'_, R>,
     ) -> (Device<'a, R, C>, Result<Response, super::super::Error<R>>) {
         match event {
             // we are waiting for the async tx to complete
