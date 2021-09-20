@@ -111,12 +111,12 @@ impl<'a, R> State<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    fn new(shared: Shared<'a, R>) -> Self {
+    fn new(shared: &'a mut Shared<'a, R>) -> Self {
         State::NoSession(no_session::NoSession::new(shared))
     }
 
     fn new_abp(
-        shared: Shared<'a, R>,
+        shared: &'a mut Shared<'a, R>,
         newskey: AES128,
         appskey: AES128,
         devaddr: DevAddr<[u8; 4]>,
@@ -144,19 +144,25 @@ pub enum JoinMode {
     },
 }
 
+pub fn new_state<'a, R>(
+    region: region::Configuration,
+    radio: R,
+    get_random: fn() -> u32,
+    tx_buffer: &'a mut [u8],
+) -> Shared<'a, R>
+where
+    R: radio::PhyRxTx + Timings + 'a,
+{
+    Shared::new(radio, None, region, Mac::default(), get_random, tx_buffer)
+}
+
 #[allow(dead_code)]
 impl<'a, R, C> Device<'a, R, C>
 where
     R: radio::PhyRxTx + Timings + 'a,
     C: CryptoFactory + Default,
 {
-    pub fn new(
-        region: region::Configuration,
-        join_mode: JoinMode,
-        radio: R,
-        get_random: fn() -> u32,
-        tx_buffer: &'a mut [u8],
-    ) -> Device<'_, R, C> {
+    pub fn new(join_mode: JoinMode, shared: &'a mut Shared<'a, R>) -> Device<'_, R, C> {
         Device {
             crypto: PhantomData::default(),
             state: match join_mode {
@@ -164,24 +170,17 @@ where
                     deveui,
                     appeui,
                     appkey,
-                } => State::new(Shared::new(
-                    radio,
-                    Some(Credentials::new(appeui, deveui, appkey)),
-                    region,
-                    Mac::default(),
-                    get_random,
-                    tx_buffer,
-                )),
+                } => {
+                        shared
+                        .get_mut_credentials()
+                        .replace(Credentials::new(appeui, deveui, appkey));
+                    State::new(shared)
+                }
                 JoinMode::ABP {
                     newskey,
                     appskey,
                     devaddr,
-                } => State::new_abp(
-                    Shared::new(radio, None, region, Mac::default(), get_random, tx_buffer),
-                    newskey,
-                    appskey,
-                    devaddr,
-                ),
+                } => State::new_abp(shared, newskey, appskey, devaddr),
             },
         }
     }
@@ -235,7 +234,7 @@ where
         data: &'m [u8],
         fport: u8,
         confirmed: bool,
-    ) -> (Device<'m, R, C>, Result<Response, Error<R>>)
+    ) -> (Device<'a, R, C>, Result<Response, Error<R>>)
     where
         Self: 'm,
     {
@@ -285,7 +284,7 @@ where
     pub async fn handle_event<'m>(
         self,
         event: Event<'m, R>,
-    ) -> (Device<'m, R, C>, Result<Response, Error<R>>)
+    ) -> (Device<'a, R, C>, Result<Response, Error<R>>)
     where
         Self: 'm,
     {

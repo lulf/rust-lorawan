@@ -141,7 +141,7 @@ impl<'a, R> Session<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    pub fn new(shared: Shared<'a, R>, session: SessionData) -> Session<'a, R> {
+    pub fn new(shared: &'a mut Shared<'a, R>, session: SessionData) -> Session<'a, R> {
         Session::Idle(Idle { shared, session })
     }
 
@@ -365,7 +365,7 @@ pub struct Idle<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    shared: Shared<'a, R>,
+    shared: &'a mut Shared<'a, R>,
     session: SessionData,
 }
 
@@ -373,7 +373,7 @@ pub struct SendingData<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    shared: Shared<'a, R>,
+    shared: &'a mut Shared<'a, R>,
     session: SessionData,
     confirmed: bool,
 }
@@ -466,7 +466,7 @@ pub struct WaitingForRxWindow<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    shared: Shared<'a, R>,
+    shared: &'a mut Shared<'a, R>,
     session: SessionData,
     confirmed: bool,
     rx_window: RxWindow,
@@ -632,7 +632,7 @@ pub struct WaitingForRx<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    shared: Shared<'a, R>,
+    shared: &'a mut Shared<'a, R>,
     session: SessionData,
     confirmed: bool,
     rx_window: RxWindow,

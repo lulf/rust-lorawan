@@ -72,7 +72,7 @@ impl<'a, R> NoSession<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    pub fn new(shared: Shared<'a, R>) -> NoSession<'a, R> {
+    pub fn new(shared: &'a mut Shared<'a, R>) -> NoSession<'a, R> {
         NoSession::Idle(Idle {
             shared,
             join_attempts: 0,
@@ -140,7 +140,7 @@ pub struct Idle<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    shared: Shared<'a, R>,
+    shared: &'a mut Shared<'a, R>,
     join_attempts: usize,
 }
 
@@ -318,7 +318,7 @@ pub struct SendingJoin<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    shared: Shared<'a, R>,
+    shared: &'a mut Shared<'a, R>,
     join_attempts: usize,
     devnonce: DevNonce,
 }
@@ -427,7 +427,7 @@ pub struct WaitingForRxWindow<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    shared: Shared<'a, R>,
+    shared: &'a mut Shared<'a, R>,
     join_attempts: usize,
     devnonce: DevNonce,
     join_rx_window: JoinRxWindow,
@@ -585,7 +585,7 @@ pub struct WaitingForJoinResponse<'a, R>
 where
     R: radio::PhyRxTx + Timings,
 {
-    shared: Shared<'a, R>,
+    shared: &'a mut Shared<'a, R>,
     join_attempts: usize,
     devnonce: DevNonce,
     join_rx_window: JoinRxWindow,
