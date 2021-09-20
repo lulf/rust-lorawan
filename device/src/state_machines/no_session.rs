@@ -203,6 +203,61 @@ where
         }
     }
 
+    #[cfg(feature = "async")]
+    pub async fn handle_event<C: CryptoFactory + Default>(
+        mut self,
+        event: Event<'_, R>,
+    ) -> (Device<'a, R, C>, Result<Response, super::super::Error<R>>) {
+        match event {
+            // NewSession Request or a Timeout from previously failed Join attempt
+            Event::NewSessionRequest | Event::TimeoutFired => {
+                match self.create_join_request::<C>() {
+                    Ok((devnonce, tx_config)) => {
+                        let radio_event: radio::Event<R> =
+                            radio::Event::TxRequest(tx_config, &self.shared.tx_buffer.as_ref());
+
+                        // send the transmit request to the radio
+                        match self.shared.radio.handle_event(radio_event).await {
+                            Ok(response) => {
+                                match response {
+                                    // intermediate state where we wait for Join to complete sending
+                                    // allows for asynchronous sending
+                                    radio::Response::Txing => (
+                                        self.into_sending_join(devnonce).into(),
+                                        Ok(Response::JoinRequestSending),
+                                    ),
+                                    // directly jump to waiting for RxWindow
+                                    // allows for asynchronous sending
+                                    radio::Response::TxDone(ms) => {
+                                        let first_window = self
+                                            .shared
+                                            .region
+                                            .get_rx_delay(&Frame::Join, &Window::_1)
+                                            + ms;
+                                        (
+                                            self.into_waiting_for_rxwindow(devnonce, first_window)
+                                                .into(),
+                                            Ok(Response::TimeoutRequest(first_window)),
+                                        )
+                                    }
+                                    _ => {
+                                        panic!("NoSession::Idle:: Unexpected radio response");
+                                    }
+                                }
+                            }
+                            Err(e) => (self.into(), Err(e.into())),
+                        }
+                    }
+                    Err(e) => (self.into(), Err(e.into())),
+                }
+            }
+            Event::RadioEvent(_radio_event) => {
+                (self.into(), Err(Error::RadioEventWhileIdle.into()))
+            }
+            Event::SendDataRequest(_) => (self.into(), Err(Error::SendDataWhileNoSession.into())),
+        }
+    }
+
     fn create_join_request<C: CryptoFactory + Default>(
         &mut self,
     ) -> Result<(DevNonce, radio::TxConfig), Error> {
@@ -287,10 +342,11 @@ where
                             // expect a complete transmit
                             radio::Response::TxDone(ms) => {
                                 let first_window =
-                                    (self.shared.region.get_rx_delay(&Frame::Join, &Window::_1) as i32
-                                    + ms as i32
-                                    + self.shared.radio.get_rx_window_offset_ms())
-                                    as u32;
+                                    (self.shared.region.get_rx_delay(&Frame::Join, &Window::_1)
+                                        as i32
+                                        + ms as i32
+                                        + self.shared.radio.get_rx_window_offset_ms())
+                                        as u32;
                                 (
                                     self.into_waiting_for_rxwindow(first_window).into(),
                                     Ok(Response::TimeoutRequest(first_window)),
@@ -649,21 +705,30 @@ where
                             ))) =
                                 lorawan_parse(self.shared.radio.get_received_packet(), C::default())
                             {
-                                let credentials = &self.shared.credentials;
-                                let decrypt = encrypted.decrypt(credentials.appkey());
-                                self.shared.downlink = Some(super::Downlink::Join(
-                                    self.shared.region.process_join_accept(&decrypt),
-                                ));
-                                if decrypt.validate_mic(credentials.appkey()) {
-                                    let session = SessionData::derive_new(
-                                        &decrypt,
-                                        self.devnonce,
-                                        credentials,
-                                    );
-                                    return (
-                                        Session::new(self.shared, session).into(),
-                                        Ok(Response::JoinSuccess),
-                                    );
+                                match &self.shared.credentials {
+                                    Some(credentials) => {
+                                        let decrypt = encrypted.decrypt(credentials.appkey());
+                                        self.shared.downlink = Some(super::Downlink::Join(
+                                            self.shared.region.process_join_accept(&decrypt),
+                                        ));
+                                        if decrypt.validate_mic(credentials.appkey()) {
+                                            let session = SessionData::derive_new(
+                                                &decrypt,
+                                                self.devnonce,
+                                                credentials,
+                                            );
+                                            return (
+                                                Session::new(self.shared, session).into(),
+                                                Ok(Response::JoinSuccess),
+                                            );
+                                        }
+                                    }
+                                    None => {
+                                        return (
+                                            self.into(),
+                                            Err(Error::DeviceDoesNotHaveOtaaCredentials.into()),
+                                        )
+                                    }
                                 }
                             }
                             (self.into(), Ok(Response::NoUpdate))
