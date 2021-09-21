@@ -70,7 +70,7 @@ pub trait PhyRxTx: Sized {
     type HandleEventFuture<'m>: core::future::Future<Output = Result<Response<Self>, Error<Self>>>
     where
         Self: 'm;
-    fn handle_event<'m>(&'m mut self, event: Event<Self>) -> Self::HandleEventFuture<'m>;
+    fn handle_event<'m>(&'m mut self, event: Event<'m, Self>) -> Self::HandleEventFuture<'m>;
 }
 
 pub struct RadioBuffer<'a> {

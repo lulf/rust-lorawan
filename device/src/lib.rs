@@ -20,7 +20,7 @@ use lorawan_encoding::{
     keys::{CryptoFactory, AES128},
     parser::{DecryptedDataPayload, DevAddr},
 };
-use state_machines::Shared;
+pub use state_machines::Shared;
 pub use state_machines::{no_session, no_session::SessionData, session, JoinAccept};
 
 type TimestampMs = u32;
