@@ -103,7 +103,7 @@ impl Idle {
         match event {
             // NewSession Request or a Timeout from previously failed Join attempt
             Event::NewSessionRequest | Event::TimeoutFired => {
-                match self.create_join_request::<R, C>(shared) {
+                match Self::create_join_request::<R, C>(shared) {
                     Ok((devnonce, tx_config)) => {
                         let radio_event: radio::Event<R> =
                             radio::Event::TxRequest(tx_config, &shared.tx_buffer.as_ref());
@@ -148,8 +148,7 @@ impl Idle {
         }
     }
 
-    fn create_join_request<R: radio::PhyRxTx + Timings, C: CryptoFactory + Default>(
-        &mut self,
+    pub(crate) fn create_join_request<R: radio::PhyRxTx + Timings, C: CryptoFactory + Default>(
         shared: &mut Shared<R>,
     ) -> Result<(DevNonce, radio::TxConfig), Error> {
         let mut random = (shared.get_random)();

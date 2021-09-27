@@ -5,6 +5,9 @@ use lorawan_encoding::parser::DecryptedDataPayload;
 pub mod no_session;
 pub mod session;
 
+#[cfg(feature = "async")]
+pub mod async_session;
+
 pub use region::DR;
 
 pub struct Shared<'a, R: radio::PhyRxTx + Timings> {

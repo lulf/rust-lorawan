@@ -43,6 +43,7 @@ where
 
 use core::fmt;
 
+#[cfg(not(feature = "async"))]
 pub trait PhyRxTx {
     type PhyEvent: fmt::Debug;
     type PhyError: fmt::Debug;
@@ -55,6 +56,20 @@ pub trait PhyRxTx {
     fn handle_event(&mut self, event: Event<Self>) -> Result<Response<Self>, Error<Self>>
     where
         Self: core::marker::Sized;
+}
+
+#[cfg(feature = "async")]
+pub trait PhyRxTx {
+    type PhyError: fmt::Debug;
+
+    type TxFuture<'m>: Future<Output = ()> + 'm;
+    fn tx<'m>(&'m mut self, buf: &'m [u8]) -> TxFuture<'m>;
+
+    type RxFuture<'m>: Future<Output = ()> + 'm;
+    fn rx<'m>(&'m mut self, rx_buf: &'m mut [u8]) -> RxFuture<'m>;
+
+    type DelayFuture<'m>: Future<Output = ()> + 'm;
+    fn delay_ms<'m>(&'m mut self, millis: u64) -> Self::DelayFuture<'m>;
 }
 
 pub struct RadioBuffer<'a> {
